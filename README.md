@@ -33,47 +33,6 @@ python training/train_exploitative.py \
 
 ---
 
-## 📁 Project Structure
-
-```
-Safe_Multi_Agent_Poker/
-├── agents/                   # RL agents
-│   ├── madac_agent.py            # MADAC algorithm implementation
-│   └── gto_agent.py              # GTO baseline opponent
-│
-├── environment/              # Poker environment
-│   ├── poker_env.py              # Multi-agent poker game logic
-│   ├── hand_evaluator.py         # Hand ranking and comparison
-│   └── game_state.py             # Game state representation
-│
-├── evaluation/               # Performance evaluation
-│   ├── ev_calculator.py          # EV and BB/100 tracking
-│   ├── metrics.py                # Sharpe ratio, drawdown, position analysis
-│   └── convergence_detector.py   # Automatic convergence detection
-│
-├── training/                 # Training scripts
-│   ├── train_exploitative.py     # Main exploitative training
-│   └── train_gto.py              # GTO baseline training
-│
-├── logging/                  # Action logging
-│   ├── action_logger.py          # CSV export for actions
-│   └── strategy_analyzer.py      # GTO vs Learning comparison
-│
-├── docs/                     # Documentation
-│   ├── gto_theory.md             # GTO explanation
-│   ├── exploitative_strategy.md  # Exploitation techniques
-│   └── training_guide.md         # Training best practices
-│
-├── logs/                     # Training outputs
-│   ├── actions/                  # Action CSV files
-│   └── checkpoints/              # Model checkpoints
-│
-├── requirements.txt          # Python dependencies
-└── README.md
-```
-
----
-
 ## Current Implementation
 
 ### 1. **Multi-Agent Training System**
