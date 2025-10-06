@@ -129,18 +129,17 @@ Safe_Multi_Agent_Poker/
 
 ---
 
-##  References
+## References
 
 This project implements techniques from:
 
-**MADAC (Multi-Agent Dual Actor-Critic)**:
-Mao et al. (2020). Multi-Agent Dual Actor-Critic for Cooperative Multi-Agent Reinforcement Learning.
+- Li, Zeyang, and Navid Azizan. *Safe Multi-Agent Reinforcement Learning with Convergence to Generalized Nash Equilibrium.* arXiv preprint arXiv:2411.15036, 2024.  
+  🔗 [https://arxiv.org/abs/2411.15036](https://arxiv.org/abs/2411.15036)
 
-**GTO Poker Theory**:
-Mathematics of Poker by Bill Chen and Jerrod Ankenman.
 
-**Exploitative Play**:
-Brown & Sandholm (2019). Superhuman AI for multiplayer poker. Science, 365(6456).
+
+
+
 
 ---
 
