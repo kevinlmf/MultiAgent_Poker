@@ -127,6 +127,10 @@ Safe_Multi_Agent_Poker/
 - Multi-table tournament (MTT) scenarios
 - Cash game vs tournament dynamics
 
+### 4. **Toward Realistic Competitive Environments**
+Model elite tournaments (e.g., Triton London) where most participants adhere to near-GTO strategies, enabling the study of adaptive counter-strategies and meta-level reasoning in realistic high-stakes settings.
+ 
+
 ---
 
 ## References
