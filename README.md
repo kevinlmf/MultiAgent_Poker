@@ -16,7 +16,7 @@ The system demonstrates a **research-grade poker AI architecture** with:
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/Safe_Multi_Agent_Poker
+git clone https://github.com/kevinlmf/Safe_Multi_Agent_Poker
 cd Safe_Multi_Agent_Poker
 
 # Setup Python environment
