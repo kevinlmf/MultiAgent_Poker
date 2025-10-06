@@ -1,14 +1,9 @@
 # Safe Multi-Agent Poker with GTO Exploitation
 
-This repository implements a **multi-agent reinforcement learning system** for **exploitative poker AI** using **PyTorch**.
-The goal is to train agents that achieve **3 BB/100 hands expected value** against **GTO (Game Theory Optimal) players** through adaptive exploitation.
+## Motivation
 
-The system demonstrates a **research-grade poker AI architecture** with:
-- MADAC (Multi-Agent Dual Actor-Critic) algorithm
-- GTO baseline opponent modeling
-- Real-time EV tracking with BB/100 metrics
-- Comprehensive performance evaluation (Sharpe ratio, drawdown analysis)
-- Detailed action logging for strategy analysis
+Most poker AIs — such as PioSOLVER — focus on heads-up GTO convergence.  This project moves beyond GTO solvers by applying multi-agent reinforcement learning (MARL) to model adaptive, exploitative play in multi-player settings, aiming for +3 BB/100 EV against near-GTO opponents.
+
 
 ---
 
