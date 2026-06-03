@@ -1,443 +1,204 @@
-# Operations Agent System · AI-Driven Inventory Optimization Platform
+# Multi-Agent Operations System
 
-**Multi-Agent Decision System** powered by Reinforcement Learning and Operations Research, combining dynamic scenario evaluation, net benefit optimization, and hierarchical planning to deliver automated inventory management for supply chain operations.
+> Hierarchical multi-agent simulation of manufacturing operations—compare OR (MIP/LP/DP), ML/DL, and OR+RL across scenarios, with P&L, service level, and strategy recommendations.
 
----
+A research platform that simulates **one year of manufacturing enterprise operations** under multiple stress scenarios, compares **traditional operations research (OR)** with **machine learning / deep learning (ML/DL)**, and optionally improves OR decisions with **residual reinforcement learning (RL)**.
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://python.org)
-[![JAX](https://img.shields.io/badge/JAX-Accelerated-orange.svg)](https://github.com/google/jax)
+[中文版 README](README_zh.md) · [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-green.svg)](https://python.org) · [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
-## Project Positioning
+## Problem Statement
 
-**AI-Driven Inventory Optimization** - A research platform that combines:
+Manufacturing firms must coordinate decisions at **different time horizons** while facing uncertain demand, supply shocks, and equipment risk:
 
-- **Operations Research**: Multi-level optimization (MIP/LP/DP), EOQ, Safety Stock, dynamic programming
-- **AI/ML Engineering**: Multi-agent RL (DQN, SAC), deep learning (JAX/Flax), LSTM forecasting
-- **Research Innovation**: Goal-oriented planning, net benefit optimization, regime-adaptive systems
+- **Quarterly**: whether to build plants, add production lines, and scale workforce  
+- **Monthly**: how much to produce per SKU and how much raw material to procure  
+- **Daily**: inventory replenishment, preventive maintenance, and order fulfillment  
 
-## Key Features
+Single-level optimizers (e.g., inventory-only EOQ) ignore capacity and investment constraints. Pure ML forecasts often violate feasibility and lack explainability. This project asks:
 
-### 1. Unified Method Interface
+> *Under realistic yearly scenarios, can we simulate enterprise P&L, compare OR vs ML/DL layer-by-layer, and produce actionable strategy recommendations?*
 
-- **Traditional Methods**: EOQ, Safety Stock, (s,S) Policy
-- **ML Methods**: LSTM, Transformer for demand forecasting
-- **RL Methods**: DQN, Multi-Agent RL for adaptive decisions
-- **Action Composition**: Unified `InventoryMethod` interface
+---
 
-### 2. Hierarchical Multi-Agent System
+## Data
 
-- **Strategic Agent (MIP)**: Facility location, network design
-- **Tactical Agent (LP)**: Inventory allocation, capacity planning
-- **Operational Agent (DP)**: Daily ordering, replenishment
+| Source | Description |
+|--------|-------------|
+| **Real CSV** | Default: `data/sample_manufacturing_demand_2024.csv` (365 days, auto-created if missing) |
+| **Custom CSV** | `date`, `demand` (or `sales`), optional `unit_price`, `unit_cost` |
+| **Synthetic** | Seasonal + weekly + promotional patterns via `--synthetic` |
 
-### 3. Net Benefit Optimization
+**Dynamic events** (`dynamic_events.py`): holidays, supply shocks, 618/Double-11, equipment failure, recalls, etc.
 
-- **Objective**: Maximize Net Benefit = Revenue - Total Cost
-- **Cost Components**: Holding, stockout, ordering, implementation
-- **ROI Analysis**: Return on investment tracking
+---
 
-### 4. Dynamic Scenario Evaluation
+## Methods
 
-- **Seasonality Detection**: Annual and weekly patterns
-- **Trend Analysis**: Upward, downward, stable trends
-- **Uncertainty Quantification**: CV coefficient for volatility
-- **Monte Carlo Simulation**: Multi-scenario risk assessment
+Three **policy modes** run on the same multi-agent pipeline:
 
-### 5. Risk-Adjusted Performance
+| Mode | Strategic (quarterly) | Tactical (monthly) | Operational (daily) |
+|------|----------------------|-------------------|---------------------|
+| **`or`** | MIP — plants, lines, headcount | LP — production & procurement | DP — inventory, maintenance, orders |
+| **`ml`** | RandomForest capacity model | GBR demand forecast + learned mix | MLP (64,32) reorder & maintenance |
+| **`or_rl`** | OR + residual RL adjustments | OR + RL production scale | OR + RL reorder / maintain boost |
 
-- **Expected Net Benefit**: Mean across scenarios
-- **Risk Measurement**: Standard deviation
-- **Risk-Adjusted Metric**: Expected Return - 0.5 × Risk
+**Risk agent** (anomaly detection + contingency) and **OR/ML advisors** → SQLite `or_recommendations`.
 
-### 6. Claude Agent Skills Integration
-
-Integration of Anthropic Claude's latest **Agent Skills** into the three-tier agent architecture:
-
-- **Tool Use**: Each agent has specialized OR tools + Claude tool calling
-- **Extended Thinking**: Deep multi-step reasoning for complex decisions
-- **Agentic Workflows**: Autonomous decision-making with context awareness
-- **Intelligent Constraint Propagation**: Strategic → Tactical → Operational
-
-#### Strategic Agent (MIP + AI)
-| Tool | Description |
-|------|-------------|
-| `analyze_facility_costs` | Analyze fixed vs variable cost trade-offs |
-| `evaluate_location_scenarios` | Evaluate different facility combinations |
-| `optimize_facility_selection` | Run MIP optimization |
-| `assess_strategic_risk` | Risk assessment for facility decisions |
-
-#### Tactical Agent (LP + AI)
-| Tool | Description |
-|------|-------------|
-| `analyze_supply_demand` | Supply-demand balance analysis |
-| `optimize_transportation` | LP transportation optimization |
-| `evaluate_route_efficiency` | Route efficiency evaluation |
-| `calculate_facility_requirements` | Calculate inbound volumes |
-
-#### Operational Agent (DP + AI)
-| Tool | Description |
-|------|-------------|
-| `analyze_inventory_items` | Value-weight trade-off analysis |
-| `optimize_inventory_mix` | DP knapsack optimization |
-| `evaluate_inventory_plan` | Plan quality evaluation |
-| `multi_facility_optimization` | Cross-facility optimization |
-
-
-## Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/kevinlmf/Operations_Agent_System
-cd Operations_Agent_System
-
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
 ```
+                    ┌─────────────────┐
+  Scenarios + Data  │  Risk Control   │
+                    └────────┬────────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         ▼                   ▼                   ▼
+   Strategic MIP/ML    Tactical LP/ML     Operational DP/MLP
+         └───────────────────┬───────────────────┘
+                             ▼
+            Profit · Service level · CSV · SQLite
+```
+
+---
+
+## Why Multi-Agent?
+
+Enterprise planning is naturally **hierarchical**. A monolithic model cannot enforce:
+
+1. **Top-down constraints** — quarterly capacity caps monthly production; monthly inflow shapes daily inventory.  
+2. **Role separation** — capital budgeting (strategic) vs. supply planning (tactical) vs. execution (operational) use different math and different data frequencies.  
+3. **Explainability** — each agent emits typed decisions (`agent/decisions.py`) stored per layer in the database.  
+4. **Method swapping** — the coordinator (`agent/coordinator.py`) switches OR vs ML backends without rewriting the simulation loop.  
+5. **Risk as a fourth agent** — detects demand anomalies and adjusts all layers via shared `RiskAdjustment` signals.
+
+Mirrors **S&OP / IBP**: capacity → production planning → daily control tower.
+
+---
+
+## Preset Scenarios
+
+Defined in `agent/scenarios/profiles.py`:
+
+| ID | Intent |
+|----|--------|
+| `baseline` | Normal year with standard event calendar |
+| `growth` | Higher demand scale, larger budget |
+| `recession` | Lower demand, tighter budget |
+| `supply_crisis` | Raw-cost inflation + capacity stress |
+| `promotion_heavy` | High promo peaks, larger starting inventory |
+
+---
+
+## Results (Summary)
+
+### 365-day · OR vs OR+RL · 5 scenarios · real sample demand
+
+From `results/scenario_comparison_365d.csv` (trained RL, dynamic events on):
+
+| Scenario | OR profit | OR+RL profit | OR fill rate | OR+RL fill rate | Winner |
+|----------|-----------|--------------|--------------|-----------------|--------|
+| baseline | -$2.56M | **-$1.68M** | 39% | **67%** | OR+RL |
+| growth | -$3.02M | **-$2.81M** | 34% | **40%** | OR+RL |
+| recession | -$2.03M | **-$1.15M** | 47% | **78%** | OR+RL |
+| supply_crisis | -$2.58M | **-$1.68M** | 38% | **67%** | OR+RL |
+| promotion_heavy | -$2.88M | **-$1.99M** | 35% | **62%** | OR+RL |
+
+**OR+RL wins all five scenarios** on profit and service level: residual RL adds reorder boosts and maintenance when OR baselines under-react to shocks.
+
+### 90-day · OR vs ML/DL vs OR+RL · quick benchmark
+
+From `results/method_comparison_90d.csv` (ML trained on demand history at run start):
+
+| Scenario | OR profit | ML/DL profit | OR fill | ML fill |
+|----------|-----------|--------------|---------|---------|
+| baseline | **-$49K** | -$985K | **66%** | 28% |
+| recession | **+$50K** | -$725K | **76%** | 30% |
+
+**Takeaway:** With light training and no hard constraints, **OR (MIP/LP/DP) is more stable**; **ML/DL needs more labels and constraint-aware learning**. **OR+RL** combines interpretability with adaptive execution (best long-horizon results in our 365-day runs).
+
+Full tables: `results/full_year_report_365d.md`, `results/method_comparison_365d.md`.
+
+---
 
 ## Quick Start
 
-### Run Dynamic Scenario Evaluation
-
-Evaluate methods across dynamic scenarios with seasonality, trends, and uncertainty:
-
 ```bash
-python evaluate_dynamic_scenarios.py
+pip install -r requirements.txt
+
+# Compare OR vs ML/DL vs OR+RL across all scenarios (365 days)
+python run_method_comparison.py
+
+# Quick 90-day benchmark
+python run_method_comparison.py --quick
+
+# OR vs OR+RL only, full annual report + SQLite
+python run_scenario_comparison.py
+
+# Single run
+python run_simulation.py --scenario recession --policy or
+python run_simulation.py --scenario baseline --policy ml
+python run_simulation.py --scenario growth --policy or_rl --train-rl
+
+python run_simulation.py --data /path/to/demand.csv
 ```
 
-### Run Net Benefit Optimization
+---
 
-Find optimal method maximizing Net Benefit = Revenue - Total Cost:
+## Outputs
 
-```bash
-python evaluate_net_benefit.py
+| Artifact | Content |
+|----------|---------|
+| `results/method_comparison_365d.csv` | 5 scenarios × 3 methods |
+| `results/scenario_comparison_365d.csv` | 5 scenarios × OR vs OR+RL |
+| `results/full_year_report_365d.md` | Annual markdown summary |
+| `results/sim_<scenario>_<policy>_*.csv` | Daily / quarterly metrics |
+| `results/sim_*_advice.txt` | OR or ML strategy narrative |
+| `data/operations.db` | SQLite: runs, layer decisions, `or_recommendations` |
+
+```sql
+SELECT layer, period, priority, action
+FROM or_recommendations WHERE run_id = 83;
 ```
 
-### Optimize RL/DL to Beat Baseline
-
-Automatically optimize RL/DL parameters to outperform traditional methods:
-
-```bash
-python optimize_for_dynamic.py
-```
-
-### Evaluate Claude-Enhanced Agent System
-
-Compare Claude-enhanced agents with traditional pipeline:
-
-```bash
-# Without API key (uses fallback mode with local tools)
-python evaluate_agent_system.py
-
-# With Claude API (enables full reasoning)
-export ANTHROPIC_API_KEY="your-api-key"
-python evaluate_agent_system.py
-```
-
-### Run All Evaluations (One Command)
-
-Use the unified evaluation script to run all tests:
-
-```bash
-# Run all evaluations
-./evaluate.sh
-
-# Quick mode (skip slow training)
-./evaluate.sh --quick
-
-# Run specific evaluation
-./evaluate.sh --agent     # Claude Agent only
-./evaluate.sh --system    # Basic system only
-./evaluate.sh --benefit   # Net benefit only
-./evaluate.sh --dynamic   # Dynamic scenarios only
-
-# With Claude API
-ANTHROPIC_API_KEY="your-key" ./evaluate.sh
-```
-
-## System Architecture
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Goal Layer                                                   │
-│  Input: U(net_benefit, cost, risk, service_level)            │
-│  Output: Goal directive (order quantities, reorder points)   │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────▼─────────────────────────────────────────┐
-│  Scenario Detector + Dynamic Evaluator                       │
-│  Seasonality | Trend | Uncertainty Detection                 │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────▼─────────────────────────────────────────┐
-│  Net Benefit Optimizer                                        │
-│  Maximize: Revenue - (Holding + Stockout + Ordering + Impl)  │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-┌────────────────────▼─────────────────────────────────────────┐
-│         Intelligent Orchestrator (Claude-Enhanced)            │
-│  Extended Thinking | Tool Use | Agentic Workflows             │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-      ┌──────────────┼──────────────┐
-      │              │              │
-┌─────▼─────┐  ┌─────▼─────┐  ┌────▼──────┐
-│ Strategic │  │ Tactical  │  │Operational│
-│   Agent   │  │   Agent   │  │   Agent   │
-│ (MIP+AI)  │  │  (LP+AI)  │  │  (DP+AI)  │
-│           │  │           │  │           │
-│ Tools:    │  │ Tools:    │  │ Tools:    │
-│ •Cost     │  │ •S/D      │  │ •Item     │
-│  Analysis │  │  Analysis │  │  Analysis │
-│ •Scenario │  │ •Transport│  │ •Knapsack │
-│  Eval     │  │  Optimize │  │  Optimize │
-│ •MIP Opt  │  │ •Route    │  │ •Multi-   │
-│ •Risk     │  │  Eval     │  │  Facility │
-│  Assess   │  │           │  │           │
-└─────┬─────┘  └─────┬─────┘  └────┬──────┘
-      │              │              │
-      │   Constraint Propagation    │
-      └──────────────┼──────────────┘
-                     │
-      ┌──────────────▼──────────────┐
-      │  Method Selector             │
-      │  Traditional | ML | RL       │
-      │  EOQ | LSTM | DQN | SAC     │
-      └──────────────────────────────┘
-```
+---
 
 ## Project Structure
 
 ```
-Operations_Agent_System/
-├── goal/                          # Goal definitions & interfaces
-│   ├── interfaces.py             # InventoryMethod interface
-│   ├── objective_selector.py     # Goal selection logic
-│   └── mathematical_framework.py # Mathematical models
-│
-├── agent/                         # All agent implementations
-│   ├── traditional/              # Traditional methods
-│   │   ├── eoq.py               # Economic Order Quantity
-│   │   ├── safety_stock.py      # Safety Stock method
-│   │   └── s_S_policy.py        # (s,S) Policy
-│   ├── ml_methods/               # ML methods
-│   │   ├── lstm.py              # LSTM forecasting
-│   │   └── transformer.py       # Transformer model
-│   ├── rl_methods/               # RL methods
-│   │   ├── dqn.py               # Deep Q-Network
-│   │   └── multi_agent.py       # Multi-agent RL
-│   ├── orchestrator/             # Multi-agent orchestration
-│   │   ├── orchestrator.py      # Main orchestrator
-│   │   └── definitions.py       # Context definitions
-│   ├── claude_enhanced/          # Claude Agent Skills Integration
-│   │   ├── agent_skills.py      # Tool definitions for all agents
-│   │   ├── enhanced_agents.py   # Claude-enhanced MIP/LP/DP agents
-│   │   └── intelligent_orchestrator.py  # AI-powered orchestration
-│   ├── claude_agent/             # Claude Inventory Agent
-│   │   └── claude_inventory_agent.py  # Standalone Claude agent
-│   ├── environment/              # RL environment
-│   │   └── env.py               # Gym-compatible environment
-│   └── or_optimization/          # OR optimizers
-│       ├── linear_programming.py
-│       ├── mixed_integer_programming.py
-│       └── dynamic_programming.py
-│
-├── evaluation/                    # Evaluation framework
-│   ├── comparison/               # Method comparison
-│   │   ├── evaluator.py         # Basic evaluator
-│   │   ├── net_benefit_optimizer.py    # Net Benefit optimization
-│   │   ├── dynamic_scenario_evaluator.py  # Dynamic evaluation
-│   │   ├── dynamic_optimizer.py # RL/DL optimizer
-│   │   └── parameter_optimizer.py # Parameter tuning
-│   └── risk_management/          # Risk control
-│       ├── anomaly_detector.py
-│       └── contingency_planner.py
-│
-├── results/                       # Output folder (CSV, PNG)
-│
-├── evaluate_dynamic_scenarios.py  # Dynamic scenario evaluation
-├── evaluate_net_benefit.py        # Net Benefit optimization
-├── evaluate_system.py             # Basic system evaluation
-├── evaluate_agent_system.py       # Claude Agent vs Traditional comparison
-├── optimize_for_dynamic.py        # RL/DL optimization
-└── README.md
+├── run_method_comparison.py      # OR vs ML vs OR+RL
+├── run_scenario_comparison.py    # OR vs OR+RL annual
+├── run_simulation.py
+├── agent/
+│   ├── strategic_agent.py        # MIP
+│   ├── tactical_agent.py         # LP
+│   ├── operational_agent.py      # DP
+│   ├── ml/                       # RF, GBR, MLP
+│   ├── rl/residual_policy.py
+│   ├── recommendation/           # OR & ML advisors
+│   ├── scenarios/profiles.py
+│   └── simulation/year_simulator.py
+├── db/schema.sql · repository.py
+└── evaluation/risk_management/
 ```
 
+---
 
-## Execution Flow
+## Future Extensions
 
-```
-1. Data Generation / Loading
-   ↓
-2. Scenario Detection (Seasonality, Trend, Uncertainty)
-   ↓
-3. Method Training (Traditional, ML, RL)
-   ↓
-4. Net Benefit Evaluation
-   ↓
-5. Risk-Adjusted Comparison
-   ↓
-6. Optimal Method Selection
-```
+1. **Constraint-aware ML** — Lagrangian or differentiable LP layers so ML respects BOM and capacity like MIP/LP.  
+2. **Deep forecasting** — LSTM/Transformer demand modules feeding tactical agent; pre-train on multi-SKU history.  
+3. **LLM strategy layer** — natural-language S&OP briefs from `or_recommendations` + scenario context.  
+4. **Multi-facility network** — extend MIP to multi-echelon location–allocation; RL for routing.  
+5. **Online learning** — update residual RL and GBR models each month with rolling demand.  
+6. **Public datasets** — adapters for M5, Rossmann, or internal ERP exports.  
+7. **Interactive dashboard** — Streamlit on `operations.db` for quarter-by-quarter drill-down.  
+8. **Stochastic programming** — two-stage MIP for demand uncertainty sets per scenario.
 
-## Performance Optimization
-
-- **JAX Acceleration**: All ML/RL methods use JAX/Flax
-- **Fast Mode**: `fast_mode=True` reduces training time
-- **JIT Compilation**: Key functions use `@jit` decorator
-
-## Experimental Results
-
-Based on comprehensive evaluations across multiple scenarios with 90-day test periods and 365-day training data:
-
-### Net Benefit Analysis
-
-| Method | Category | Net Benefit | ROI | Service Level | Forecast Acc |
-|--------|----------|-------------|-----|---------------|--------------|
-| **Safety Stock** | Traditional | **$78,452.64** | **7,745%** | **76.67%** | 81.03% |
-| EOQ | Traditional | -$11,427.55 | -1,243% | 44.44% | 81.03% |
-| LSTM | ML | -$59,156.53 | -945% | 1.11% | 78.87% |
-| DQN | RL | -$74,092.00 | -670% | 1.11% | 82.28% |
-
-### Cost Breakdown
-
-| Method | Operational Cost | Implementation | Training | Inference | Maintenance | Total Cost |
-|--------|------------------|----------------|----------|-----------|-------------|------------|
-| Safety Stock | $15,498.36 | $1,000 | $0 | $9 | $900 | $17,407.36 |
-| EOQ | $11,518.55 | $1,000 | $0 | $9 | $900 | $13,427.55 |
-| LSTM | $49,611.53 | $5,000 | $2,000 | $45 | $4,500 | $61,156.53 |
-| DQN | $54,002.00 | $8,000 | $5,000 | $90 | $9,000 | $76,092.00 |
-
-### Dynamic Scenario Performance
-
-Evaluation under dynamic conditions with seasonality, trends, and 20% uncertainty:
-
-- **Seasonality Detection**: Successfully identified annual (365.25-day) and weekly (7-day) patterns
-- **Trend Adaptation**: Detected upward/downward trends with 5% strength
-- **Uncertainty Handling**: Monte Carlo simulation with 10 scenarios for risk assessment
-- **Risk-Adjusted Metric**: Expected Return - 0.5 × Risk for conservative optimization
-
-### Key Findings
-
-1. **Traditional Methods Dominate**: Safety Stock achieves highest Net Benefit with proper service level management
-2. **RL/ML Training Gap**: DQN and LSTM require more training episodes to compete with traditional baselines
-3. **Cost-Benefit Trade-off**: Higher implementation costs of ML/RL methods not justified by current performance
-4. **Forecast Accuracy**: All methods achieve ~80% forecast accuracy, but action decisions vary significantly
-5. **Service Level Critical**: High service level (76.67%) directly correlates with Net Benefit maximization
-
-## Claude Agent Skills: How AI Beats Traditional Methods
-
-The Claude-enhanced agent system provides several advantages over traditional methods:
-
-### Intelligent Tool Selection
-
-Claude analyzes the problem context and selects the most appropriate tools:
-
-```python
-# Example: Claude Strategic Agent workflow
-1. analyze_facility_costs()     # Understand cost structure
-2. evaluate_location_scenarios() # Quick what-if analysis  
-3. optimize_facility_selection() # Run MIP optimization
-4. assess_strategic_risk()       # Validate decision
-```
-
-### Agentic Reasoning
-
-With Claude API enabled, agents perform multi-step reasoning:
-
-```
-Strategic Decision:
-├── Analyzed 5 facilities, found cost efficiency ranking [2, 0, 4, 1, 3]
-├── Evaluated 3 scenarios, scenario [0,2,4] has lowest total cost
-├── MIP optimization confirmed: open facilities [0, 1, 2, 4]
-└── Risk assessment: low risk, 23% capacity buffer
-
-Tactical Decision:
-├── Supply-demand analysis: feasible, 84% utilization
-├── LP optimization: $828.09 transport cost
-└── Route efficiency: 1.808 avg cost per unit
-
-Operational Decision:
-├── Item analysis: top density items [0, 1, 2]
-├── Multi-facility optimization: $2,115.99 total value
-└── Capacity used: 78-92% across facilities
-```
-
-### Constraint Propagation
-
-The intelligent orchestrator ensures optimal constraint flow:
-
-```
-Phase 1: Strategic (MIP)
-    └── Decision: Open facilities [0, 1, 2, 4]
-           │
-Phase 2: Tactical (LP) ← Receives: Only open facilities
-    └── Decision: Optimal transport flow
-           │
-Phase 3: Operational (DP) ← Receives: Facility volumes
-    └── Decision: Optimal inventory mix per facility
-```
-
-### When Claude Beats Traditional Methods
-
-| Scenario | Traditional | Claude-Enhanced | Advantage |
-|----------|-------------|-----------------|-----------|
-| Simple static | Fast | Overhead | Traditional |
-| Complex multi-facility | Manual tuning | Auto-reasoning | Claude |
-| Dynamic uncertainty | Fixed rules | Adaptive | Claude |
-| Explainability needed | Black box | Full reasoning | Claude |
-
-
-## Future Work: Making ML/DL Beat Traditional Methods
-
-The current results show traditional methods (Safety Stock) significantly outperforming ML/DL approaches. Here's the roadmap to close this gap:
-
-### 1. Training Scale & Stability
-
-- **Increase Episodes**: Scale from 10 → 500+ episodes for proper policy convergence
-- **Curriculum Learning**: Start with stable demand, progressively add seasonality and uncertainty
-- **Reward Shaping**: Design rewards that explicitly penalize stockouts and incentivize service levels
-- **Pre-training**: Use imitation learning to warm-start RL agents from Safety Stock policy
-
-### 2. State Representation & Feature Engineering
-
-- **Temporal Features**: Add day-of-week, month-of-year, holiday indicators to capture seasonality
-- **Trend Signals**: Include moving averages (7-day, 30-day) and momentum indicators
-- **Inventory Context**: Encode days-of-supply, stockout history, and order pipeline status
-- **Attention Mechanism**: Let LSTM/Transformer learn which historical patterns matter most
-
-### 3. Action Space & Policy Design
-
-- **Continuous Actions**: Replace discrete order quantities with continuous policy (SAC/PPO)
-- **Action Bounds**: Constrain actions to feasible ranges based on EOQ/Safety Stock baselines
-- **Hybrid Policy**: Combine OR-computed baseline with RL-learned adjustments (residual RL)
-- **Multi-step Planning**: Use model-based RL to plan ahead during high-uncertainty periods
-
-### 4. Objective Alignment
-
-- **Service Level Constraint**: Add hard constraint for minimum 95% service level
-- **Cost-Aware Reward**: Include holding/stockout costs directly in reward function
-- **Risk-Sensitive RL**: Use CVaR or worst-case optimization for robust policies
-- **Multi-Objective**: Pareto optimization balancing cost, service, and inventory turnover
-
-### 5. Evaluation & Deployment
-
-- **Longer Test Horizons**: Evaluate over 365+ days to capture full seasonal cycles
-- **Out-of-Distribution Testing**: Test on demand patterns not seen during training
-- **Ensemble Methods**: Combine predictions from LSTM + DQN + Traditional for robustness
-- **Online Adaptation**: Implement continuous learning to adapt to demand distribution shifts
-
-
+---
 
 ## License
 
-This project is licensed under the MIT License.
+MIT — for education and research only. Validate all decisions with domain experts before production use.
 
 ## Disclaimer
 
@@ -446,3 +207,4 @@ This project is licensed under the MIT License.
 ---
 
 May our lives keep optimizing, like finding balance in every step😊.
+

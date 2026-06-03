@@ -319,7 +319,7 @@ class ContingencyPlanner:
 - High confidence demand will normalize
 - Low customer retention impact
 
-⚠️ **WARNING:** This plan has {risk_mitigation_level * 100:.0f}% risk mitigation - consider higher priority plans
+⚠️ **WARNING:** This plan has 30% risk mitigation - consider higher priority plans
             """
         )
         plans.append(plan_c)
