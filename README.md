@@ -122,6 +122,10 @@ Full tables: `results/full_year_report_365d.md`, `results/method_comparison_365d
 
 ## Quick Start
 
+# Clone the repository
+git clone https://github.com/kevinlmf/Operations_Agent_System
+cd Operations_Agent_System
+
 ```bash
 pip install -r requirements.txt
 
