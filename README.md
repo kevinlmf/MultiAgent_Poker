@@ -119,7 +119,7 @@ From `results/method_comparison_90d.csv` (ML trained on demand history at run st
 Full tables: `results/full_year_report_365d.md`, `results/method_comparison_365d.md`.
 
 ---
-
+```bash
 ## Quick Start
 
 # Clone the repository
