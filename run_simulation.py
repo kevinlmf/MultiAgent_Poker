@@ -24,6 +24,25 @@ def main():
     p.add_argument("--no-db", action="store_true")
     p.add_argument("--db", type=str, default="data/operations.db")
     p.add_argument("--days", type=int, default=365)
+    p.add_argument("--parallel-solvers", action="store_true", help="MIP+Greedy+Native parallel race")
+    p.add_argument("--solver-workers", type=int, default=4)
+    p.add_argument("--no-native", action="store_true", help="Skip C++ OpenMP, use Python threads only")
+    p.add_argument("--no-decompose", action="store_true", help="Disable site-level decomposition")
+    p.add_argument("--use-forecast", action="store_true", help="Forecast Agent drives planner (not oracle demand)")
+    p.add_argument("--forecast-model", type=str, default="gbr",
+                   choices=["naive", "exp_smooth", "gbr", "mlp", "lstm"])
+    p.add_argument("--no-robust-lp", action="store_true", help="Disable robust LP even with forecast")
+    p.add_argument("--capex-amortize-days", type=int, default=365,
+                   help="Amortize strategic CapEx over N days (0=lump sum)")
+    p.add_argument("--use-memory", action="store_true", help="Enable strategy memory retrieval")
+    p.add_argument("--apply-memory", action="store_true", help="Apply memory hints to forecast/solver settings")
+    p.add_argument("--no-apply-memory-policy", action="store_true",
+                   help="Do not switch to or_rl from memory recall")
+    p.add_argument("--memory-rl-sim", type=float, default=0.55,
+                   help="Min similarity to apply memory or_rl + RL warm-start")
+    p.add_argument("--no-auto-rl-train", action="store_true",
+                   help="Disable auto RL train when memory triggers or_rl")
+    p.add_argument("--no-save-memory", action="store_true", help="Do not write run to strategy memory")
     p.add_argument("--list-scenarios", action="store_true")
     p.add_argument("--list-runs", action="store_true")
     args = p.parse_args()
@@ -48,8 +67,33 @@ def main():
         enable_risk_agent=not args.no_risk,
         db_path=args.db,
         persist_db=not args.no_db,
+        parallel_solvers=args.parallel_solvers,
+        solver_workers=args.solver_workers,
+        use_native_solver=not args.no_native,
+        decompose_strategic=not args.no_decompose,
+        use_forecast=args.use_forecast,
+        forecast_model=args.forecast_model,
+        use_robust_lp=args.use_forecast and not args.no_robust_lp,
+        capex_amortize_days=args.capex_amortize_days,
+        use_memory=args.use_memory,
+        apply_memory_hints=args.apply_memory or args.use_memory,
+        apply_memory_policy=not args.no_apply_memory_policy,
+        memory_rl_min_similarity=args.memory_rl_sim,
+        auto_rl_from_memory=not args.no_auto_rl_train,
+        save_to_memory=not args.no_save_memory,
     )
-    print(f"场景: {args.scenario} | 策略: {args.policy.upper()} | 天数: {args.days}")
+    mode = args.policy.upper()
+    if args.parallel_solvers:
+        mode += " + PARALLEL"
+    if args.use_forecast:
+        mode += f" + FCST({args.forecast_model})"
+    if args.use_forecast and not args.no_robust_lp:
+        mode += " + ROBUST-LP"
+    if args.capex_amortize_days > 0:
+        mode += f" + CapEx/{args.capex_amortize_days}d"
+    if args.use_memory:
+        mode += " + MEMORY(RL)"
+    print(f"场景: {args.scenario} | 策略: {mode} | 天数: {args.days}")
     result = YearEnterpriseSimulator(cfg).run()
     print_summary(result, args.db)
     if result.or_advice:

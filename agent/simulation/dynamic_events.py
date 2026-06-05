@@ -131,14 +131,16 @@ def default_year_events() -> List[EnterpriseEvent]:
 class EventImpactCalculator:
     """Combine active events for a given day into multipliers."""
 
-    def __init__(self, events: Optional[List[EnterpriseEvent]] = None):
+    def __init__(self, events: Optional[List[EnterpriseEvent]] = None, wrap_annual: bool = False):
         self.events = events or default_year_events()
+        self.wrap_annual = wrap_annual
 
     def active_events(self, day: int) -> List[EnterpriseEvent]:
+        d = day % 365 if self.wrap_annual else day
         return [
             e
             for e in self.events
-            if e.start_day <= day < e.start_day + e.duration_days
+            if e.start_day <= d < e.start_day + e.duration_days
         ]
 
     def day_modifiers(self, day: int) -> Dict[str, float]:

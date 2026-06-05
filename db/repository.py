@@ -45,6 +45,49 @@ class SimulationRepository:
         ):
             if spec[0] not in cols:
                 conn.execute(f"ALTER TABLE simulation_runs ADD COLUMN {spec[0]} {spec[1]}")
+        # Ensure forecast / unified tables exist (schema.sql also creates them)
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS forecast_experiments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                data_source TEXT, model_name TEXT NOT NULL, lags INTEGER DEFAULT 14,
+                train_days INTEGER, val_days INTEGER, test_days INTEGER,
+                fit_latency_ms REAL, notes TEXT
+            );
+            CREATE TABLE IF NOT EXISTS forecast_metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                experiment_id INTEGER NOT NULL REFERENCES forecast_experiments(id) ON DELETE CASCADE,
+                split_name TEXT NOT NULL, mae REAL, rmse REAL, mape REAL, smape REAL,
+                bias REAL, n_samples INTEGER, predict_latency_ms REAL,
+                UNIQUE (experiment_id, split_name)
+            );
+            CREATE TABLE IF NOT EXISTS unified_experiment_metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                forecast_experiment_id INTEGER REFERENCES forecast_experiments(id) ON DELETE SET NULL,
+                simulation_run_id INTEGER REFERENCES simulation_runs(id) ON DELETE SET NULL,
+                split_name TEXT, model_name TEXT, policy_mode TEXT, scenario_id TEXT,
+                forecast_mape REAL, forecast_smape REAL, annual_profit REAL,
+                service_level REAL, solver_latency_ms REAL, end_to_end_latency_ms REAL,
+                constraint_violations INTEGER DEFAULT 0, notes TEXT
+            );
+            CREATE TABLE IF NOT EXISTS strategy_memory (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                scenario_id TEXT, demand_mean REAL, demand_std REAL, demand_trend REAL,
+                demand_cv REAL, demand_peak_ratio REAL, policy_mode TEXT, forecast_model TEXT,
+                parallel_solvers INTEGER DEFAULT 0, use_robust_lp INTEGER DEFAULT 0,
+                use_forecast INTEGER DEFAULT 0, annual_profit REAL, service_level REAL,
+                forecast_mape REAL, solver_hint TEXT,
+                simulation_run_id INTEGER REFERENCES simulation_runs(id) ON DELETE SET NULL,
+                recommendation_text TEXT, notes TEXT, rl_q_table_json TEXT
+            );
+            """
+        )
+        mem_cols = {r[1] for r in conn.execute("PRAGMA table_info(strategy_memory)").fetchall()}
+        if "rl_q_table_json" not in mem_cols:
+            conn.execute("ALTER TABLE strategy_memory ADD COLUMN rl_q_table_json TEXT")
 
     def create_run(
         self,
@@ -203,3 +246,147 @@ class SimulationRepository:
                 "SELECT id, created_at, data_source, annual_profit, service_level FROM simulation_runs ORDER BY id DESC LIMIT ?",
                 conn, params=(limit,),
             )
+
+    def create_forecast_experiment(
+        self,
+        model_name: str,
+        data_source: Optional[str],
+        train_days: int,
+        val_days: int,
+        test_days: int,
+        lags: int = 14,
+        fit_latency_ms: float = 0.0,
+        notes: Optional[str] = None,
+    ) -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """INSERT INTO forecast_experiments
+                   (data_source, model_name, lags, train_days, val_days, test_days, fit_latency_ms, notes)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (data_source, model_name, lags, train_days, val_days, test_days, fit_latency_ms, notes),
+            )
+            return int(cur.lastrowid)
+
+    def save_forecast_metrics(
+        self,
+        experiment_id: int,
+        split_name: str,
+        mae: float,
+        rmse: float,
+        mape: float,
+        smape: float,
+        bias: float,
+        n_samples: int,
+        predict_latency_ms: float = 0.0,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO forecast_metrics
+                   (experiment_id, split_name, mae, rmse, mape, smape, bias, n_samples, predict_latency_ms)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (experiment_id, split_name, mae, rmse, mape, smape, bias, n_samples, predict_latency_ms),
+            )
+
+    def save_unified_metrics(
+        self,
+        *,
+        forecast_experiment_id: Optional[int] = None,
+        simulation_run_id: Optional[int] = None,
+        split_name: Optional[str] = None,
+        model_name: Optional[str] = None,
+        policy_mode: Optional[str] = None,
+        scenario_id: Optional[str] = None,
+        forecast_mape: Optional[float] = None,
+        forecast_smape: Optional[float] = None,
+        annual_profit: Optional[float] = None,
+        service_level: Optional[float] = None,
+        solver_latency_ms: Optional[float] = None,
+        end_to_end_latency_ms: Optional[float] = None,
+        constraint_violations: int = 0,
+        notes: Optional[str] = None,
+    ) -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """INSERT INTO unified_experiment_metrics
+                   (forecast_experiment_id, simulation_run_id, split_name, model_name, policy_mode,
+                    scenario_id, forecast_mape, forecast_smape, annual_profit, service_level,
+                    solver_latency_ms, end_to_end_latency_ms, constraint_violations, notes)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    forecast_experiment_id, simulation_run_id, split_name, model_name, policy_mode,
+                    scenario_id, forecast_mape, forecast_smape, annual_profit, service_level,
+                    solver_latency_ms, end_to_end_latency_ms, constraint_violations, notes,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def list_forecast_experiments(self, limit: int = 50) -> pd.DataFrame:
+        with self._connect() as conn:
+            return pd.read_sql_query(
+                """SELECT e.id, e.created_at, e.model_name, e.train_days, e.val_days, e.test_days,
+                          m.split_name, m.mape, m.smape, m.rmse, m.bias
+                   FROM forecast_experiments e
+                   LEFT JOIN forecast_metrics m ON m.experiment_id = e.id
+                   ORDER BY e.id DESC, m.split_name LIMIT ?""",
+                conn,
+                params=(limit,),
+            )
+
+    def list_unified_metrics(self, limit: int = 50) -> pd.DataFrame:
+        with self._connect() as conn:
+            return pd.read_sql_query(
+                "SELECT * FROM unified_experiment_metrics ORDER BY id DESC LIMIT ?",
+                conn,
+                params=(limit,),
+            )
+
+    def save_strategy_memory(
+        self,
+        *,
+        scenario_id: str,
+        signature: Any,
+        policy_mode: str,
+        forecast_model: str,
+        parallel_solvers: int,
+        use_robust_lp: int,
+        use_forecast: int,
+        annual_profit: float,
+        service_level: float,
+        forecast_mape: Optional[float] = None,
+        solver_hint: Optional[str] = None,
+        simulation_run_id: Optional[int] = None,
+        recommendation_text: str = "",
+        notes: Optional[str] = None,
+        rl_q_table_json: Optional[str] = None,
+    ) -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """INSERT INTO strategy_memory
+                   (scenario_id, demand_mean, demand_std, demand_trend, demand_cv, demand_peak_ratio,
+                    policy_mode, forecast_model, parallel_solvers, use_robust_lp, use_forecast,
+                    annual_profit, service_level, forecast_mape, solver_hint,
+                    simulation_run_id, recommendation_text, notes, rl_q_table_json)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    scenario_id, signature.mean, signature.std, signature.trend, signature.cv,
+                    signature.peak_ratio, policy_mode, forecast_model, parallel_solvers,
+                    use_robust_lp, use_forecast, annual_profit, service_level, forecast_mape,
+                    solver_hint, simulation_run_id, recommendation_text, notes, rl_q_table_json,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def list_strategy_memory(
+        self,
+        scenario_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> pd.DataFrame:
+        sql = "SELECT * FROM strategy_memory"
+        params: tuple = ()
+        if scenario_id:
+            sql += " WHERE scenario_id=?"
+            params = (scenario_id,)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params = params + (limit,)
+        with self._connect() as conn:
+            return pd.read_sql_query(sql, conn, params=params)

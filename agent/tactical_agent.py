@@ -70,3 +70,47 @@ class TacticalAgent:
             total_cost=float(result["total_cost"]),
             is_feasible=True,
         )
+
+    def decide_robust(
+        self,
+        month: int,
+        demand_point: np.ndarray,
+        demand_upper: np.ndarray,
+        capacity_limit: float,
+        raw_cost_multiplier: float = 1.0,
+        price_multiplier: float = 1.0,
+        risk: Optional[RiskAdjustment] = None,
+    ) -> TacticalDecision:
+        risk = risk or RiskAdjustment()
+        point = demand_point * risk.demand_forecast_multiplier
+        upper = demand_upper * risk.demand_forecast_multiplier
+        cap = capacity_limit * risk.capacity_multiplier * risk.production_scale
+        raw_limits = upper @ self.bom.T + 500.0
+        result = self.solver.optimize_robust(
+            product_prices=self.product_prices * price_multiplier,
+            unit_production_costs=self.unit_production_costs,
+            raw_material_costs=self.raw_base_costs * raw_cost_multiplier,
+            bom=self.bom,
+            demand_point=point,
+            demand_upper=upper,
+            capacity_limit=cap,
+            raw_supply_limit=raw_limits,
+        )
+        if not result.get("success"):
+            n = len(self.product_prices)
+            return TacticalDecision(
+                month=month,
+                production_volume=np.zeros(n),
+                raw_material_procurement=np.zeros(self.bom.shape[0]),
+                revenue=0.0,
+                total_cost=0.0,
+                is_feasible=False,
+            )
+        return TacticalDecision(
+            month=month,
+            production_volume=np.array(result["production"]),
+            raw_material_procurement=np.array(result["raw_procurement"]),
+            revenue=float(result["revenue"]),
+            total_cost=float(result["total_cost"]),
+            is_feasible=True,
+        )

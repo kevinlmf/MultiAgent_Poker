@@ -96,3 +96,81 @@ CREATE TABLE IF NOT EXISTS or_recommendations (
 CREATE INDEX IF NOT EXISTS idx_ops_run_day ON operational_decisions(run_id, day_index);
 CREATE INDEX IF NOT EXISTS idx_risk_run_day ON risk_events(run_id, day_index);
 CREATE INDEX IF NOT EXISTS idx_or_rec_run ON or_recommendations(run_id, layer);
+
+-- Forecast experiments (Phase 1: walk-forward eval)
+CREATE TABLE IF NOT EXISTS forecast_experiments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    data_source     TEXT,
+    model_name      TEXT NOT NULL,
+    lags            INTEGER DEFAULT 14,
+    train_days      INTEGER,
+    val_days        INTEGER,
+    test_days       INTEGER,
+    fit_latency_ms  REAL,
+    notes           TEXT
+);
+
+CREATE TABLE IF NOT EXISTS forecast_metrics (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    experiment_id   INTEGER NOT NULL REFERENCES forecast_experiments(id) ON DELETE CASCADE,
+    split_name      TEXT NOT NULL,
+    mae             REAL,
+    rmse            REAL,
+    mape            REAL,
+    smape           REAL,
+    bias            REAL,
+    n_samples       INTEGER,
+    predict_latency_ms REAL,
+    UNIQUE (experiment_id, split_name)
+);
+
+-- Unified metrics: forecast quality + downstream simulation
+CREATE TABLE IF NOT EXISTS unified_experiment_metrics (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at              TEXT NOT NULL DEFAULT (datetime('now')),
+    forecast_experiment_id  INTEGER REFERENCES forecast_experiments(id) ON DELETE SET NULL,
+    simulation_run_id       INTEGER REFERENCES simulation_runs(id) ON DELETE SET NULL,
+    split_name              TEXT,
+    model_name              TEXT,
+    policy_mode             TEXT,
+    scenario_id             TEXT,
+    forecast_mape           REAL,
+    forecast_smape          REAL,
+    annual_profit           REAL,
+    service_level           REAL,
+    solver_latency_ms       REAL,
+    end_to_end_latency_ms   REAL,
+    constraint_violations   INTEGER DEFAULT 0,
+    notes                   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_exp_model ON forecast_experiments(model_name);
+CREATE INDEX IF NOT EXISTS idx_unified_exp ON unified_experiment_metrics(forecast_experiment_id);
+
+-- Strategy memory / RAG layer
+CREATE TABLE IF NOT EXISTS strategy_memory (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    scenario_id         TEXT,
+    demand_mean         REAL,
+    demand_std          REAL,
+    demand_trend        REAL,
+    demand_cv           REAL,
+    demand_peak_ratio   REAL,
+    policy_mode         TEXT,
+    forecast_model      TEXT,
+    parallel_solvers    INTEGER DEFAULT 0,
+    use_robust_lp       INTEGER DEFAULT 0,
+    use_forecast        INTEGER DEFAULT 0,
+    annual_profit       REAL,
+    service_level       REAL,
+    forecast_mape       REAL,
+    solver_hint         TEXT,
+    simulation_run_id   INTEGER REFERENCES simulation_runs(id) ON DELETE SET NULL,
+    recommendation_text TEXT,
+    notes               TEXT,
+    rl_q_table_json     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_strategy_memory_scenario ON strategy_memory(scenario_id);

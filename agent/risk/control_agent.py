@@ -8,8 +8,8 @@ from typing import List, Optional
 
 import numpy as np
 
-from evaluation.risk_management.anomaly_detector import DemandAnomalyDetector, Anomaly, RiskLevel
-from evaluation.risk_management.contingency_planner import ContingencyPlanner, ContingencyPlan
+from agent.risk.anomaly_detector import DemandAnomalyDetector, Anomaly, RiskLevel
+from agent.risk.contingency_planner import ContingencyPlanner, ContingencyPlan
 
 
 @dataclass

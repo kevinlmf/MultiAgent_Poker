@@ -88,3 +88,31 @@ class ProductionPlanningSolver:
             "total_cost": prod_cost + raw_cost,
             "net_margin": revenue - prod_cost - raw_cost,
         }
+
+    def optimize_robust(
+        self,
+        product_prices: np.ndarray,
+        unit_production_costs: np.ndarray,
+        raw_material_costs: np.ndarray,
+        bom: np.ndarray,
+        demand_point: np.ndarray,
+        demand_upper: np.ndarray,
+        capacity_limit: float,
+        raw_supply_limit: np.ndarray,
+    ) -> Dict:
+        """
+        Robust monthly LP:
+          - Production capped at min(capacity, demand_upper) per SKU
+          - Raw procurement sized for demand_upper (anti-stockout)
+          - Objective still margin-max on production at point scale
+        """
+        upper = np.maximum(demand_point, demand_upper)
+        cap_eff = min(float(capacity_limit), float(np.sum(upper)))
+        raw_limits = np.maximum(raw_supply_limit, upper @ bom.T + 100.0)
+        result = self.optimize(
+            product_prices, unit_production_costs, raw_material_costs, bom,
+            demand_point, cap_eff, raw_limits,
+        )
+        if result.get("success"):
+            result["status"] = "robust_lp"
+        return result

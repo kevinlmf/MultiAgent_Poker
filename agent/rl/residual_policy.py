@@ -7,8 +7,9 @@ Residual RL — 在 OR 决策基础上学习微调
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -88,6 +89,10 @@ class ResidualRLPolicy:
     ) -> np.ndarray:
         ma7 = np.mean(demand_history[-7:]) if len(demand_history) >= 7 else demand_today
         ma30 = np.mean(demand_history[-30:]) if len(demand_history) >= 30 else ma7
+        if ma30 <= 0 or not np.isfinite(ma30):
+            ma30 = max(demand_today, 1.0)
+        if ma7 <= 0 or not np.isfinite(ma7):
+            ma7 = max(demand_today, 1.0)
         inv_ratio = inventory / max(ma7 * 7, 1.0)
         trend = ma7 / max(ma30, 1.0)
         backlog_ratio = backlog_size / max(ma7, 1.0)
@@ -111,6 +116,37 @@ class ResidualRLPolicy:
         )
         merged.force_maintain = rl_adj.force_maintain
         return merged
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "n_actions": self.n_actions,
+            "lr": self.lr,
+            "gamma": self.gamma,
+            "epsilon": self.epsilon,
+            "q": {json.dumps(list(k)): v.tolist() for k, v in self.q.items()},
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ResidualRLPolicy":
+        policy = cls(
+            n_actions=int(data.get("n_actions", 5)),
+            lr=float(data.get("lr", 0.15)),
+            gamma=float(data.get("gamma", 0.95)),
+            epsilon=float(data.get("epsilon", 0.05)),
+        )
+        for key_str, values in data.get("q", {}).items():
+            key = tuple(json.loads(key_str))
+            policy.q[key] = np.array(values, dtype=float)
+        return policy
+
+    def load_checkpoint(self, data: Dict[str, Any]) -> None:
+        loaded = self.from_dict(data)
+        self.q = loaded.q
+        self.epsilon = max(self.epsilon, loaded.epsilon)
+
+    @property
+    def num_states(self) -> int:
+        return len(self.q)
 
 
 def train_residual_policy(
