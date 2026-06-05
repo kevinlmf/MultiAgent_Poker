@@ -1,6 +1,11 @@
 # Multi-Agent Operations System
 
-> AI forecasts demand → OR plans under constraints → RL fine-tunes daily execution → Memory reuses what worked.
+A multi-agent manufacturing simulator where:
+
+- **AI Agents** forecast demand and coordinate decisions
+- **Operations Research (MIP / LP / DP)** optimizes production plans
+- **Reinforcement Learning (RL)** adapts execution in real time
+- **Memory Systems** reuse successful strategies across scenarios
 
 [中文版 README](README_zh.md) · [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-green.svg)](https://python.org) · [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
